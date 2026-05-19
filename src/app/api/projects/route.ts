@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const projectSchema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -14,6 +15,13 @@ export async function GET() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const rl = checkRateLimit(`project:${user.id}`, 6, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: `Rate limit exceeded. Retry in ${rl.retryAfterSec}s.` },
+      { status: 429 },
+    );
+  }
 
   const { data, error } = await supabase
     .from("projects")
@@ -60,4 +68,3 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ ok: true, projectId: project.id }, { status: 201 });
 }
-

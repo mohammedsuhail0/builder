@@ -18,7 +18,7 @@ export default async function FeedPage() {
   const { data: posts } = await supabase
     .from("posts")
     .select(
-      "id,title,description,skills_needed,created_at,author_id,idea_timestamps(posted_at,author_name,author_college)",
+      "id,title,description,skills_needed,image_urls,created_at,author_id,idea_timestamps(posted_at,author_name,author_college)",
     )
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
@@ -58,6 +58,11 @@ export default async function FeedPage() {
                 <article key={post.id} className="rounded-2xl border border-zinc-200 bg-surface p-5">
                   <h2 className="font-heading text-xl font-semibold">{post.title}</h2>
                   <p className="mt-2 whitespace-pre-wrap text-sm">{post.description}</p>
+                  {(post.image_urls ?? []).length > 0 ? (
+                    <p className="mt-2 text-xs text-muted">
+                      {post.image_urls?.length} image file(s) attached
+                    </p>
+                  ) : null}
                   <p className="mt-3 inline-block rounded-full bg-green-100 px-3 py-1 text-xs text-green-800">
                     Posted {new Date(ts?.posted_at ?? post.created_at).toLocaleString()} by{" "}
                     {ts?.author_name ?? "Unknown"}

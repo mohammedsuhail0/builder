@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const createPostSchema = z.object({
   title: z.string().trim().min(1).max(100),
   description: z.string().trim().min(1).max(1000),
   skillsNeeded: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
+  imageUrls: z.array(z.string().trim().min(1)).max(4).default([]),
 });
 
 export async function GET(request: Request) {
@@ -16,6 +18,13 @@ export async function GET(request: Request) {
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const rl = checkRateLimit(`post:${user.id}`, 12, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: `Rate limit exceeded. Retry in ${rl.retryAfterSec}s.` },
+      { status: 429 },
+    );
   }
 
   const url = new URL(request.url);
@@ -76,6 +85,7 @@ export async function POST(request: Request) {
       title: parsed.data.title,
       description: parsed.data.description,
       skills_needed: parsed.data.skillsNeeded,
+      image_urls: parsed.data.imageUrls,
     })
     .select("id")
     .single();
@@ -97,4 +107,3 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ ok: true, postId: post.id }, { status: 201 });
 }
-

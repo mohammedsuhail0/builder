@@ -2,11 +2,13 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PostImageUpload } from "@/components/post-image-upload";
 
 export default function NewPostPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -20,6 +22,7 @@ export default function NewPostPage() {
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean),
+      imageUrls,
     };
 
     const res = await fetch("/api/posts", {
@@ -60,6 +63,10 @@ export default function NewPostPage() {
           placeholder="Skills needed (comma separated)"
           className="rounded-xl border border-zinc-300 bg-surface px-4 py-3"
         />
+        <PostImageUpload onChange={setImageUrls} />
+        {imageUrls.length > 0 ? (
+          <p className="text-xs text-muted">{imageUrls.length} image(s) ready.</p>
+        ) : null}
         <button
           disabled={loading}
           className="rounded-xl bg-brand px-4 py-3 font-medium text-white disabled:opacity-60"
@@ -72,4 +79,3 @@ export default function NewPostPage() {
     </main>
   );
 }
-

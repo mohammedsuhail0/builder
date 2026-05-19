@@ -3,6 +3,7 @@ export type PostWithTimestamp = {
   title: string;
   description: string;
   skills_needed: string[];
+  image_urls?: string[];
   created_at: string;
   author_id: string;
   idea_timestamps: {

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MainNav } from "@/components/main-nav";
 import { SendMessageForm } from "@/components/send-message-form";
+import { decryptText } from "@/lib/crypto";
 
 type Params = { params: Promise<{ userId: string }> };
 
@@ -42,7 +43,7 @@ export default async function MessageThreadPage({ params }: Params) {
                 : "mr-auto bg-zinc-100 text-zinc-900"
             }`}
           >
-            <p>{m.content}</p>
+            <p>{decryptText(m.content)}</p>
           </article>
         ))}
       </section>
@@ -50,4 +51,3 @@ export default async function MessageThreadPage({ params }: Params) {
     </main>
   );
 }
-
