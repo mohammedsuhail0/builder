@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { LogoutButton } from "@/components/logout-button";
+import { MainNav } from "@/components/main-nav";
 import type { PostWithTimestamp } from "@/types/post";
 
 export default async function FeedPage() {
@@ -40,6 +41,7 @@ export default async function FeedPage() {
         </div>
       </div>
       <p className="mt-2 text-sm text-muted">{user.email}</p>
+      <MainNav />
       {items.length === 0 ? (
         <section className="mt-8 rounded-2xl border border-zinc-200 bg-surface p-6">
           <p className="font-medium">No posts yet.</p>

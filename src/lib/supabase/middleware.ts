@@ -32,7 +32,14 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isAuthPath =
     pathname.startsWith("/auth") || pathname.startsWith("/onboarding");
-  const isProtectedPath = pathname.startsWith("/feed");
+  const isProtectedPath =
+    pathname.startsWith("/feed") ||
+    pathname.startsWith("/explore") ||
+    pathname.startsWith("/profile") ||
+    pathname.startsWith("/messages") ||
+    pathname.startsWith("/projects") ||
+    pathname.startsWith("/notifications") ||
+    pathname.startsWith("/posts/new");
 
   if (!user && isProtectedPath) {
     const url = request.nextUrl.clone();
