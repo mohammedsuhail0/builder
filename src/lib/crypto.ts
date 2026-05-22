@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
-import { env } from "@/lib/env";
+import { serverEnv } from "@/lib/env-server";
 
 const ALGO = "aes-256-gcm";
 
 function keyFromEnv() {
-  return crypto.createHash("sha256").update(env.MESSAGE_ENCRYPTION_KEY).digest();
+  return crypto.createHash("sha256").update(serverEnv.MESSAGE_ENCRYPTION_KEY).digest();
 }
 
 export function encryptText(plain: string) {
@@ -32,4 +32,3 @@ export function decryptText(payload: string) {
     return payload;
   }
 }
-

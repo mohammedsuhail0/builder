@@ -2,19 +2,34 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MainNav } from "@/components/main-nav";
+import { isMvpMode } from "@/lib/mvp-mode";
 
 export default async function ExplorePage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/auth/login");
+  if (!user && !isMvpMode()) redirect("/auth/login");
 
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id,name,college,department,year,skills,build_statement")
-    .order("created_at", { ascending: false })
-    .limit(100);
+  const { data: profiles } = user
+    ? await supabase
+        .from("profiles")
+        .select("id,name,college,department,year,skills,build_statement")
+        .order("created_at", { ascending: false })
+        .limit(100)
+    : {
+        data: [
+          {
+            id: "demo-user",
+            name: "Suhail",
+            college: "Demo College",
+            department: "CSE",
+            year: 3,
+            skills: ["React", "Node"],
+            build_statement: "Building student-first products.",
+          },
+        ],
+      };
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 py-10">
@@ -36,4 +51,3 @@ export default async function ExplorePage() {
     </main>
   );
 }
-

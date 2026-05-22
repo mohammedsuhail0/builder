@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { LogoutButton } from "@/components/logout-button";
 import { MainNav } from "@/components/main-nav";
 import type { PostWithTimestamp } from "@/types/post";
+import { isMvpMode } from "@/lib/mvp-mode";
 
 export default async function FeedPage() {
   const supabase = await createClient();
@@ -11,18 +12,33 @@ export default async function FeedPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
+  if (!user && !isMvpMode()) {
     redirect("/auth/login");
   }
 
-  const { data: posts } = await supabase
-    .from("posts")
-    .select(
-      "id,title,description,skills_needed,image_urls,created_at,author_id,idea_timestamps(posted_at,author_name,author_college)",
-    )
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .limit(20);
+  const { data: posts } = user
+    ? await supabase
+        .from("posts")
+        .select(
+          "id,title,description,skills_needed,image_urls,created_at,author_id,idea_timestamps(posted_at,author_name,author_college)",
+        )
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(20)
+    : {
+        data: [
+          {
+            id: "demo-1",
+            title: "Campus skill-swap app",
+            description: "Students exchange coding/design/public-speaking skills.",
+            skills_needed: ["React", "UI"],
+            image_urls: [],
+            created_at: new Date().toISOString(),
+            author_id: "demo",
+            idea_timestamps: [{ posted_at: new Date().toISOString(), author_name: "Demo User", author_college: "Demo College" }],
+          },
+        ] as unknown as PostWithTimestamp[],
+      };
 
   const items = (posts ?? []) as PostWithTimestamp[];
 
@@ -40,7 +56,7 @@ export default async function FeedPage() {
           <LogoutButton />
         </div>
       </div>
-      <p className="mt-2 text-sm text-muted">{user.email}</p>
+      <p className="mt-2 text-sm text-muted">{user?.email ?? "mvp-preview@local"}</p>
       <MainNav />
       {items.length === 0 ? (
         <section className="mt-8 rounded-2xl border border-zinc-200 bg-surface p-6">

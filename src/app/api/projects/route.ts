@@ -15,7 +15,7 @@ export async function GET() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const rl = checkRateLimit(`project:${user.id}`, 6, 60_000);
+  const rl = await checkRateLimit(`project:${user.id}`, 6, 60_000);
   if (!rl.ok) {
     return NextResponse.json(
       { error: `Rate limit exceeded. Retry in ${rl.retryAfterSec}s.` },
@@ -39,6 +39,14 @@ export async function POST(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const rl = await checkRateLimit(`project-create:${user.id}`, 3, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: `Rate limit exceeded. Retry in ${rl.retryAfterSec}s.` },
+      { status: 429 },
+    );
+  }
 
   const raw = await request.json();
   const parsed = projectSchema.safeParse(raw);

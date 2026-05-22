@@ -2,20 +2,32 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MainNav } from "@/components/main-nav";
+import { isMvpMode } from "@/lib/mvp-mode";
 
 export default async function ProjectsPage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/auth/login");
+  if (!user && !isMvpMode()) redirect("/auth/login");
 
-  const { data: projects } = await supabase
-    .from("projects")
-    .select("id,name,description,created_at")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .limit(50);
+  const { data: projects } = user
+    ? await supabase
+        .from("projects")
+        .select("id,name,description,created_at")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(50)
+    : {
+        data: [
+          {
+            id: "demo-project",
+            name: "Buildr MVP",
+            description: "Demo project journey preview.",
+            created_at: new Date().toISOString(),
+          },
+        ],
+      };
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 py-10">
@@ -37,4 +49,3 @@ export default async function ProjectsPage() {
     </main>
   );
 }
-

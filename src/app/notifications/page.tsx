@@ -2,20 +2,34 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MainNav } from "@/components/main-nav";
 import { MarkNotificationsReadButton } from "@/components/mark-notifications-read";
+import { isMvpMode } from "@/lib/mvp-mode";
 
 export default async function NotificationsPage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/auth/login");
+  if (!user && !isMvpMode()) redirect("/auth/login");
 
-  const { data: notifications } = await supabase
-    .from("notifications")
-    .select("id,title,type,is_read,created_at,payload")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(100);
+  const { data: notifications } = user
+    ? await supabase
+        .from("notifications")
+        .select("id,title,type,is_read,created_at,payload")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(100)
+    : {
+        data: [
+          {
+            id: "n1",
+            title: "Someone wants to join your project",
+            type: "join_request",
+            is_read: false,
+            created_at: new Date().toISOString(),
+            payload: {},
+          },
+        ],
+      };
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-6 py-10">
@@ -41,4 +55,3 @@ export default async function NotificationsPage() {
     </main>
   );
 }
-

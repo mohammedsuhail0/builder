@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const rl = checkRateLimit(`dm:${user.id}`, 20, 60_000);
+  const rl = await checkRateLimit(`dm:${user.id}`, 20, 60_000);
   if (!rl.ok) {
     return NextResponse.json(
       { error: `Rate limit exceeded. Retry in ${rl.retryAfterSec}s.` },

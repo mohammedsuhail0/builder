@@ -1,8 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { env } from "@/lib/env";
+import { isMvpMode } from "@/lib/mvp-mode";
 
 export async function updateSession(request: NextRequest) {
+  if (isMvpMode()) {
+    return NextResponse.next({ request });
+  }
   let response = NextResponse.next({ request });
   const supabase = createServerClient(
     env.NEXT_PUBLIC_SUPABASE_URL,

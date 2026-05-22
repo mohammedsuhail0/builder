@@ -198,3 +198,31 @@ for update
 to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+-- =========================================================================
+-- RATE LIMITS & WHITE_LIST SECURE LOCKDOWN
+-- =========================================================================
+alter table public.invite_whitelist enable row level security;
+alter table public.rate_limits enable row level security;
+
+-- These tables are only accessed via database triggers or security definer
+-- RPC functions, so we do not expose any direct public RLS policies on them.
+-- They are completely locked down to direct REST queries.
+
+-- =========================================================================
+-- PROJECT MEMBERS DELETION (LEAVE / KICK CO-FOUNDERS)
+-- =========================================================================
+drop policy if exists "project_members_delete_policy" on public.project_members;
+create policy "project_members_delete_policy"
+on public.project_members
+for delete
+to authenticated
+using (
+  auth.uid() = user_id
+  or exists (
+    select 1
+    from public.project_members pm
+    where pm.project_id = project_id and pm.user_id = auth.uid() and pm.role = 'founder'
+  )
+);
+

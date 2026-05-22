@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MainNav } from "@/components/main-nav";
 import { AddUpdateForm, FollowButton } from "@/components/project-actions";
+import { isMvpMode } from "@/lib/mvp-mode";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -11,7 +12,32 @@ export default async function ProjectDetailPage({ params }: Params) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/auth/login");
+  if (!user && !isMvpMode()) redirect("/auth/login");
+
+  if (!user) {
+    return (
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 py-10">
+        <h1 className="font-heading text-3xl font-semibold">Buildr MVP</h1>
+        <p className="mt-2">Demo project journey preview.</p>
+        <MainNav />
+        <section className="mt-8">
+          <h2 className="font-heading text-xl font-semibold">Team</h2>
+          <p className="mt-3 rounded-lg border border-zinc-200 bg-surface px-3 py-2 text-sm">
+            Suhail • Demo College • founder
+          </p>
+        </section>
+        <section className="mt-8">
+          <h2 className="font-heading text-xl font-semibold">Timeline</h2>
+          <article className="mt-3 rounded-xl border border-zinc-200 bg-surface p-4">
+            <p className="mb-2 inline-block rounded-full bg-orange-100 px-2 py-1 text-xs text-orange-800">
+              Milestone
+            </p>
+            <p className="text-sm">Built first connected MVP flow.</p>
+          </article>
+        </section>
+      </main>
+    );
+  }
 
   const [{ data: project }, { data: members }, { data: updates }, { data: follow }] =
     await Promise.all([
@@ -93,4 +119,3 @@ export default async function ProjectDetailPage({ params }: Params) {
     </main>
   );
 }
-

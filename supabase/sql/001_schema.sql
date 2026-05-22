@@ -135,3 +135,129 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.create_profile_for_new_user();
+
+-- =========================================================================
+-- INVITE-ONLY GATEWAY
+-- =========================================================================
+create table if not exists public.invite_whitelist (
+  email text primary key,
+  created_at timestamptz not null default now()
+);
+
+-- Pre-seed some default allowed emails for testing/admin purposes
+insert into public.invite_whitelist (email)
+values ('admin@buildr.com'), ('suhail@buildr.com')
+on conflict (email) do nothing;
+
+create or replace function public.check_user_invite()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (
+    select 1 from public.invite_whitelist
+    where email = new.email
+  ) then
+    raise exception 'This email is not invited to Buildr.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_check_user_invite on auth.users;
+create trigger trg_check_user_invite
+before insert on auth.users
+for each row execute function public.check_user_invite();
+
+-- =========================================================================
+-- IMMUTABLE TIMESTAMP CONSTRAINT
+-- =========================================================================
+create or replace function public.enforce_immutable_timestamp()
+returns trigger
+language plpgsql
+as $$
+begin
+  if TG_OP = 'INSERT' then
+    new.posted_at = now();
+    return new;
+  elsif TG_OP = 'UPDATE' then
+    raise exception 'Timestamps are immutable and cannot be updated.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_immutable_timestamp on public.idea_timestamps;
+create trigger trg_immutable_timestamp
+before insert or update on public.idea_timestamps
+for each row execute function public.enforce_immutable_timestamp();
+
+-- =========================================================================
+-- DISTRIBUTED SERVERLESS RATE LIMITER
+-- =========================================================================
+create table if not exists public.rate_limits (
+  key text primary key,
+  count integer not null default 1,
+  reset_at timestamptz not null
+);
+
+create or replace function public.check_rate_limit(
+  p_key text,
+  p_limit integer,
+  p_window_seconds integer
+)
+returns table (
+  ok boolean,
+  retry_after_sec integer
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+  v_reset_at timestamptz;
+  v_count integer;
+begin
+  -- Proactive automatic pruning of expired entries
+  delete from public.rate_limits where reset_at < v_now;
+
+  insert into public.rate_limits (key, count, reset_at)
+  values (p_key, 1, v_now + (p_window_seconds || ' seconds')::interval)
+  on conflict (key) do update
+  set count = case
+    when public.rate_limits.reset_at < v_now then 1
+    else public.rate_limits.count + 1
+  end,
+  reset_at = case
+    when public.rate_limits.reset_at < v_now then v_now + (p_window_seconds || ' seconds')::interval
+    else public.rate_limits.reset_at
+  end
+  returning public.rate_limits.count, public.rate_limits.reset_at
+  into v_count, v_reset_at;
+
+  if v_count > p_limit then
+    return query select false, ceil(extract(epoch from (v_reset_at - v_now)))::integer;
+  else
+    return query select true, ceil(extract(epoch from (v_reset_at - v_now)))::integer;
+  end if;
+end;
+$$;
+
+-- =========================================================================
+-- PERFORMANCE SCALING DATABASE INDEXES
+-- =========================================================================
+create index if not exists idx_posts_author_id on public.posts(author_id);
+create index if not exists idx_posts_created_at on public.posts(created_at desc);
+create index if not exists idx_idea_timestamps_author_id on public.idea_timestamps(author_id);
+create index if not exists idx_projects_created_by on public.projects(created_by);
+create index if not exists idx_project_members_user_id on public.project_members(user_id);
+create index if not exists idx_project_updates_project_id on public.project_updates(project_id);
+create index if not exists idx_project_follows_user_id on public.project_follows(user_id);
+create index if not exists idx_messages_sender_recipient on public.messages(sender_id, recipient_id);
+create index if not exists idx_messages_created_at on public.messages(created_at asc);
+create index if not exists idx_notifications_user_id on public.notifications(user_id);
+create index if not exists idx_notifications_created_at on public.notifications(created_at desc);
+
