@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar, UIPost, UIUser } from "@/components/Cards";
 import { CommentsDrawer } from "@/components/CommentsDrawer";
+import { isMvpMode } from "@/lib/mvp-mode";
 
 const supabase = createClient();
 
@@ -91,6 +92,25 @@ export default function ReelsPage() {
   const syncUpdates = async () => {
     try {
       setLoading(true);
+      if (isMvpMode()) {
+        const mappedReels = fallbackLoopsPosts.map((post) => ({
+          ...post,
+          likes: post.likes ?? 0,
+          liked: false,
+          comments: post.comments ?? 0,
+        }));
+        setUpdates(mappedReels);
+        
+        if (typeof window !== "undefined") {
+          const savedMap: Record<string, boolean> = {};
+          mappedReels.forEach((post) => {
+            savedMap[post.id] = localStorage.getItem(`buildr_saved_${post.id}`) === "true";
+          });
+          setSavedPosts(savedMap);
+        }
+        return;
+      }
+
       // 1. Fetch live posts (focusing on updates or newest ideas)
       const { data: dbPosts } = await supabase
         .from("posts")

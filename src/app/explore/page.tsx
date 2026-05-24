@@ -8,6 +8,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar, IdeaCard, UpdateCard, UIPost, UIUser } from "@/components/Cards";
 import { CommentsDrawer } from "@/components/CommentsDrawer";
+import { isMvpMode } from "@/lib/mvp-mode";
+
 const supabase = createClient();
 
 
@@ -111,6 +113,43 @@ export default function ExplorePage() {
   const syncData = async () => {
     try {
       setLoading(true);
+      if (isMvpMode()) {
+        setSuggestions(fallbackExploreUsers);
+        
+        let finalPosts: UIPost[] = [];
+        if (typeof window !== "undefined") {
+          const localPostsStr = localStorage.getItem("buildr_local_posts");
+          if (localPostsStr) {
+            try {
+              const localArr = JSON.parse(localPostsStr);
+              if (Array.isArray(localArr)) {
+                finalPosts = localArr.map((post) => ({
+                  ...post,
+                  likes: 0,
+                  comments: 0
+                }));
+              }
+            } catch (_) {}
+          }
+        }
+        
+        const mappedFallbacks = fallbackExplorePosts.map((p) => ({
+          ...p,
+          likes: 0,
+          comments: 0
+        }));
+        
+        const combined = [...finalPosts, ...mappedFallbacks];
+        const unique = combined.filter((v, i, a) => a.findIndex((t) => t.id === v.id) === i);
+        setPosts(unique);
+        
+        if (selectedPost) {
+          const updated = unique.find((p) => p.id === selectedPost.id);
+          if (updated) setSelectedPost(updated);
+        }
+        return;
+      }
+
       // 1. Fetch suggestions/users from profiles table
       const { data: dbProfiles } = await supabase
         .from("profiles")

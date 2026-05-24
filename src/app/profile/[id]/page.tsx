@@ -9,6 +9,7 @@ import { useTheme } from "next-themes";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar, IdeaCard, UpdateCard, UIPost, UIUser } from "@/components/Cards";
 import { CommentsDrawer } from "@/components/CommentsDrawer";
+import { isMvpMode } from "@/lib/mvp-mode";
 
 const TABS = [
   { id: "posts", icon: Grid, label: "Push Log" },
@@ -98,179 +99,156 @@ function EditProfileModal({ user, onClose, onProfileUpdated }: EditProfileModalP
       <div className="absolute inset-0" onClick={onClose} />
 
       <div className="bg-card border-t border-border rounded-t-[24px] max-h-[90vh] flex flex-col relative z-10 w-full sm:max-w-md sm:mx-auto shadow-2xl overflow-hidden">
-        {/* Drag handle */}
-        <div className="w-12 h-1.5 bg-border rounded-full mx-auto my-3 shrink-0" />
-
         {/* Header */}
-        <div className="flex items-center justify-between px-4 pb-3 border-b border-border">
-          <span className="font-space-grotesk font-extrabold text-[17px] text-foreground">Edit Dev Space</span>
-          <button onClick={onClose} className="p-2 -mr-2 text-muted-foreground hover:text-foreground">
-            <X size={20} />
+        <div className="px-4 py-4 border-b border-border flex items-center justify-between shrink-0 bg-background/50">
+          <span className="font-space-grotesk font-extrabold text-[15px] tracking-tight text-foreground uppercase">
+            Edit profile // info
+          </span>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-full text-muted-foreground hover:text-foreground cursor-pointer"
+          >
+            <X size={18} />
           </button>
         </div>
 
-        {/* Form Body */}
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5 no-scrollbar pb-10">
-          <form onSubmit={handleSave} className="flex flex-col gap-5">
-            {/* Avatar Section */}
-            <div className="flex flex-col items-center gap-2">
-              <div className="relative group cursor-pointer w-20 h-20 rounded-full overflow-hidden border border-border bg-secondary flex items-center justify-center">
-                {avatar ? (
-                  <img src={avatar} alt="avatar" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-xl font-bold text-cyan-400">
-                    {name ? name.slice(0, 2).toUpperCase() : "??"}
-                  </span>
-                )}
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                  <Camera className="w-6 h-6 text-white" />
-                </div>
-              </div>
+        {/* Scrollable Form */}
+        <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 no-scrollbar">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
+              Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full bg-secondary border border-border/20 focus:border-primary/50 outline-none rounded-lg px-3 py-2 text-[13px] text-foreground font-medium"
+              placeholder="Your full name"
+              required
+            />
+          </div>
 
-              {/* Avatar Image URL input */}
-              <div className="w-full flex flex-col gap-1">
-                <label className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-wider">
-                  Avatar Image URL
-                </label>
-                <input
-                  type="text"
-                  placeholder="https://images.unsplash.com/photo-..."
-                  value={avatar}
-                  onChange={(e) => setAvatar(e.target.value)}
-                  className="w-full bg-input rounded-xl py-2 px-3 text-[13px] text-foreground placeholder:text-muted-foreground outline-none border border-transparent focus:border-cyan-500/40 transition-colors"
-                />
-              </div>
-            </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
+              Avatar URL
+            </label>
+            <input
+              type="text"
+              value={avatar}
+              onChange={(e) => setAvatar(e.target.value)}
+              className="w-full bg-secondary border border-border/20 focus:border-primary/50 outline-none rounded-lg px-3 py-2 text-[13px] text-foreground font-medium"
+              placeholder="Link to avatar image (optional)"
+            />
+          </div>
 
-            {/* Name */}
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-wider">
-                Builder Name
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
+                College
               </label>
               <input
                 type="text"
-                required
-                placeholder="Developer name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full bg-input rounded-xl py-2 px-3 text-[13px] text-foreground placeholder:text-muted-foreground outline-none border border-transparent focus:border-cyan-500/40 transition-colors"
+                value={college}
+                onChange={(e) => setCollege(e.target.value)}
+                className="w-full bg-secondary border border-border/20 focus:border-primary/50 outline-none rounded-lg px-3 py-2 text-[13px] text-foreground font-medium"
+                placeholder="College name"
               />
             </div>
-
-            {/* College, Dept, Year Grid */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-wider">
-                  College
-                </label>
-                <input
-                  type="text"
-                  placeholder="IIT Madras"
-                  value={college}
-                  onChange={(e) => setCollege(e.target.value)}
-                  className="w-full bg-input rounded-xl py-2 px-3 text-[13px] text-foreground outline-none border border-transparent focus:border-cyan-500/40 transition-colors"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-wider">
-                  Dept
-                </label>
-                <input
-                  type="text"
-                  placeholder="CS"
-                  value={dept}
-                  onChange={(e) => setDept(e.target.value)}
-                  className="w-full bg-input rounded-xl py-2 px-3 text-[13px] text-foreground outline-none border border-transparent focus:border-cyan-500/40 transition-colors"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-wider">
-                  Year
-                </label>
-                <input
-                  type="text"
-                  placeholder="‘24"
-                  value={year}
-                  onChange={(e) => setYear(e.target.value)}
-                  className="w-full bg-input rounded-xl py-2 px-3 text-[13px] text-foreground outline-none border border-transparent focus:border-cyan-500/40 transition-colors"
-                />
-              </div>
-            </div>
-
-            {/* Build Statement */}
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-wider">
-                Build Statement
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
+                Department
               </label>
-              <textarea
-                rows={2}
-                placeholder="what do you want to build?"
-                value={buildStatement}
-                onChange={(e) => setBuildStatement(e.target.value)}
-                className="w-full bg-input rounded-xl py-2 px-3 text-[13px] text-foreground placeholder:text-muted-foreground outline-none border border-transparent focus:border-cyan-500/40 transition-colors resize-none font-sans"
+              <input
+                type="text"
+                value={dept}
+                onChange={(e) => setDept(e.target.value)}
+                className="w-full bg-secondary border border-border/20 focus:border-primary/50 outline-none rounded-lg px-3 py-2 text-[13px] text-foreground font-medium"
+                placeholder="e.g. CSE, ECE"
               />
             </div>
+          </div>
 
-            {/* Skills */}
-            <div className="flex flex-col gap-2">
-              <label className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-wider">
-                My Stack
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {AVAILABLE_SKILLS.map((skill) => {
-                  const selected = selectedSkills.includes(skill);
-                  return (
-                    <button
-                      key={skill}
-                      type="button"
-                      onClick={() => toggleSkill(skill)}
-                      className={`px-3 py-1 rounded-md text-[11px] font-mono font-bold transition-all border ${
-                        selected
-                          ? "bg-cyan-500 text-white border-cyan-500 shadow-md shadow-cyan-500/20"
-                          : "bg-secondary text-secondary-foreground hover:bg-secondary/80 border-border"
-                      }`}
-                    >
-                      {skill.toLowerCase()}
-                    </button>
-                  );
-                })}
-              </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
+              Year of graduation
+            </label>
+            <input
+              type="text"
+              value={year}
+              onChange={(e) => setYear(e.target.value)}
+              className="w-full bg-secondary border border-border/20 focus:border-primary/50 outline-none rounded-lg px-3 py-2 text-[13px] text-foreground font-medium"
+              placeholder="e.g. 2026, 2025"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
+              Build Statement
+            </label>
+            <textarea
+              value={buildStatement}
+              onChange={(e) => setBuildStatement(e.target.value)}
+              rows={2}
+              className="w-full bg-secondary border border-border/20 focus:border-primary/50 outline-none rounded-lg px-3 py-2 text-[13px] text-foreground font-medium resize-none"
+              placeholder="I want to build..."
+            />
+          </div>
+
+          {/* Skills stack */}
+          <div className="flex flex-col gap-2">
+            <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
+              My Skills / Stack
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {AVAILABLE_SKILLS.map((skill) => {
+                const selected = selectedSkills.includes(skill);
+                return (
+                  <button
+                    key={skill}
+                    type="button"
+                    onClick={() => toggleSkill(skill)}
+                    className={`px-3 py-1 rounded-full text-[11px] font-bold border transition-colors cursor-pointer ${
+                      selected
+                        ? "bg-primary/10 text-primary border-primary"
+                        : "bg-secondary text-muted-foreground border-border/40 hover:border-muted-foreground"
+                    }`}
+                  >
+                    {skill}
+                  </button>
+                );
+              })}
             </div>
+          </div>
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading || !name.trim()}
-              className="w-full py-3 rounded-xl bg-cyan-500 text-white font-bold font-mono text-[13px] mt-2 active:scale-[0.98] transition-transform disabled:opacity-50 shadow-lg shadow-cyan-500/20 animate-spark-pop"
-            >
-              {loading ? "COMPILING..." : "COMPILE_CHANGES"}
-            </button>
-          </form>
-        </div>
+          {/* Save Button */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3 mt-2 rounded-xl bg-primary text-primary-foreground font-extrabold text-[13.5px] uppercase tracking-wider hover:opacity-95 transform active:scale-98 transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
+          >
+            {loading ? "saving profile..." : "save compiled updates"}
+          </button>
+        </form>
       </div>
     </div>
   );
 }
 
-interface ProfilePageProps {
-  params: Promise<{ id: string }>;
-}
-
-export default function ProfilePage({ params }: ProfilePageProps) {
-  const { id } = use(params);
+export default function ProfilePage({ params }: { params: any }) {
   const router = useRouter();
+  const { id } = use<{ id: string }>(params);
   const supabase = createClient();
   const { setTheme, resolvedTheme } = useTheme();
 
-  const [activeTab, setActiveTab] = useState<typeof TABS[number]["id"]>("posts");
   const [profileUser, setProfileUser] = useState<UIUser | null>(null);
   const [viewerUser, setViewerUser] = useState<UIUser | null>(null);
   const [posts, setPosts] = useState<UIPost[]>([]);
-  const [selectedPost, setSelectedPost] = useState<UIPost | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"posts" | "liked" | "requested" | "saved">("posts");
   const [activeCommentsPostId, setActiveCommentsPostId] = useState<string | null>(null);
+  const [selectedPost, setSelectedPost] = useState<UIPost | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [showConnectionsOpen, setShowConnectionsOpen] = useState(false);
   const [showStoryOpen, setShowStoryOpen] = useState(false);
   const [connections, setConnections] = useState<UIUser[]>([]);
@@ -282,6 +260,27 @@ export default function ProfilePage({ params }: ProfilePageProps) {
       const loadConnections = async () => {
         setLoadingConnections(true);
         try {
+          if (isMvpMode()) {
+            setConnections([
+              {
+                id: "u1",
+                name: "Priya M.",
+                college: "IIT Madras",
+                dept: "EE",
+                avatar_url: undefined,
+                initials: "PM",
+              },
+              {
+                id: "u2",
+                name: "Rahul K.",
+                college: "BITS Pilani",
+                dept: "Mech",
+                avatar_url: undefined,
+                initials: "RK",
+              },
+            ]);
+            return;
+          }
           const { data } = await supabase
             .from("profiles")
             .select("id,name,college,department,avatar_url")
@@ -333,6 +332,63 @@ export default function ProfilePage({ params }: ProfilePageProps) {
 
   const fetchProfileAndData = async () => {
     try {
+      if (isMvpMode()) {
+        const fallbackViewer = {
+          id: "curr",
+          name: "Arjun",
+          college: "NIT Trichy",
+        };
+        setViewerUser(fallbackViewer);
+
+        const targetId = id || "u1";
+        const matchedFallbackUser =
+          targetId === "u2"
+            ? {
+                id: "u2",
+                name: "Rahul K.",
+                college: "BITS Pilani",
+                dept: "Mech",
+                year: "‘24",
+                avatar_url: undefined,
+                skills: ["CAD", "ROS", "Python"],
+                build_statement: "want to build — consumer robotics.",
+                initials: "RK",
+              }
+            : {
+                id: "u1",
+                name: "Priya M.",
+                college: "IIT Madras",
+                dept: "EE",
+                year: "‘25",
+                avatar_url: undefined,
+                skills: ["Embedded", "C++", "PCB Design"],
+                build_statement: "want to build — hardware that doesn't suck.",
+                initials: "PM",
+              };
+
+        setProfileUser(matchedFallbackUser);
+
+        const matchedPosts = [
+          {
+            id: targetId === "u2" ? "p2" : "p1",
+            type: targetId === "u2" ? "update" : "idea",
+            title: targetId === "u2" ? undefined : "Nova Class",
+            projectName: targetId === "u2" ? "SyncPods" : undefined,
+            description: targetId === "u2" ? undefined : "An alternative scheduling tool for our college...",
+            updateText: targetId === "u2" ? "Finally got the webRTC connection stable..." : undefined,
+            skillsNeeded: targetId === "u2" ? ["CAD", "ROS"] : ["Reverse Engineering", "Backend"],
+            imageUrls: [],
+            timestamp: "2h ago",
+            likes: targetId === "u2" ? 12 : 24,
+            comments: targetId === "u2" ? 1 : 2,
+            profiles: matchedFallbackUser,
+          },
+        ];
+        setPosts(matchedPosts as any);
+        setLoading(false);
+        return;
+      }
+
       const { data: { user: sessionUser } } = await supabase.auth.getUser();
       if (!sessionUser) {
         router.push("/auth/login");

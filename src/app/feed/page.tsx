@@ -6,9 +6,8 @@ import { X, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar, IdeaCard, UpdateCard, UIPost, UIUser } from "@/components/Cards";
-
-
 import { CommentsDrawer } from "@/components/CommentsDrawer";
+import { isMvpMode } from "@/lib/mvp-mode";
 
 
 const mockFeedUsers: UIUser[] = [
@@ -85,6 +84,29 @@ export default function FeedPage() {
 
   const syncPosts = async () => {
     try {
+      if (isMvpMode()) {
+        setUserEmail("arjun@campus.edu");
+        setHuddles(mockFeedUsers);
+        
+        let finalPosts: UIPost[] = [];
+        if (typeof window !== "undefined") {
+          const localPostsStr = localStorage.getItem("buildr_local_posts");
+          if (localPostsStr) {
+            try {
+              const localArr = JSON.parse(localPostsStr);
+              if (Array.isArray(localArr)) {
+                finalPosts = [...localArr];
+              }
+            } catch (_) {}
+          }
+        }
+        
+        const combined = [...finalPosts, ...initialMockPosts.map(p => ({ ...p }))];
+        const unique = combined.filter((v, i, a) => a.findIndex((t) => t.id === v.id) === i);
+        setPosts(unique);
+        return;
+      }
+
       // 1. Fetch user session
       const {
         data: { user },
@@ -180,20 +202,34 @@ export default function FeedPage() {
   useEffect(() => {
     syncPosts();
 
-    // Listen to real-time additions to posts table
-    const subscription = supabase
-      .channel("live_feed")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "posts" },
-        () => {
-          syncPosts();
-        },
-      )
-      .subscribe();
+    if (isMvpMode()) {
+      setLoading(false);
+      return;
+    }
+
+    let subscription: any = null;
+    try {
+      // Listen to real-time additions to posts table
+      subscription = supabase
+        .channel("live_feed")
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "posts" },
+          () => {
+            syncPosts();
+          },
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn("Realtime subscription setup failed:", err);
+    }
 
     return () => {
-      supabase.removeChannel(subscription);
+      try {
+        if (subscription) {
+          supabase.removeChannel(subscription);
+        }
+      } catch (_) {}
     };
   }, []);
 
