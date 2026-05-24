@@ -94,7 +94,7 @@ function EditProfileModal({ user, onClose, onProfileUpdated }: EditProfileModalP
   };
 
   return (
-    <div className="fixed inset-0 bg-black/85 z-50 flex flex-col justify-end animate-fade-in">
+    <div className="fixed inset-0 bg-black/85 z-[100] flex flex-col justify-end animate-fade-in">
       <div className="absolute inset-0" onClick={onClose} />
 
       <div className="bg-card border-t border-border rounded-t-[24px] max-h-[90vh] flex flex-col relative z-10 w-full sm:max-w-md sm:mx-auto shadow-2xl overflow-hidden">
@@ -271,6 +271,65 @@ export default function ProfilePage({ params }: ProfilePageProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showConnectionsOpen, setShowConnectionsOpen] = useState(false);
+  const [showStoryOpen, setShowStoryOpen] = useState(false);
+  const [connections, setConnections] = useState<UIUser[]>([]);
+  const [loadingConnections, setLoadingConnections] = useState(false);
+  const [storyProgress, setStoryProgress] = useState(0);
+
+  useEffect(() => {
+    if (showConnectionsOpen) {
+      const loadConnections = async () => {
+        setLoadingConnections(true);
+        try {
+          const { data } = await supabase
+            .from("profiles")
+            .select("id,name,college,department,avatar_url")
+            .neq("id", id)
+            .limit(10);
+          if (data) {
+            setConnections(
+              data.map((p) => ({
+                id: p.id,
+                name: p.name,
+                college: p.college,
+                dept: p.department || "EE",
+                avatar_url: p.avatar_url || undefined,
+                initials: p.name
+                  .split(" ")
+                  .map((n: string) => n[0])
+                  .join("")
+                  .toUpperCase()
+                  .slice(0, 2),
+              }))
+            );
+          }
+        } catch (err) {
+          console.error("Error loading connections:", err);
+        } finally {
+          setLoadingConnections(false);
+        }
+      };
+      loadConnections();
+    }
+  }, [showConnectionsOpen, id]);
+
+  useEffect(() => {
+    if (showStoryOpen) {
+      setStoryProgress(0);
+      const interval = setInterval(() => {
+        setStoryProgress((prev) => {
+          if (prev >= 100) {
+            clearInterval(interval);
+            setShowStoryOpen(false);
+            return 100;
+          }
+          return prev + 2;
+        });
+      }, 100);
+      return () => clearInterval(interval);
+    }
+  }, [showStoryOpen]);
 
   const fetchProfileAndData = async () => {
     try {
@@ -550,7 +609,11 @@ export default function ProfilePage({ params }: ProfilePageProps) {
         <div className="flex items-center justify-between gap-6">
           {/* Avatar with Custom Buildr ring */}
           <div className="flex flex-col items-center">
-            <div className="p-[2.5px] buildr-ring-gradient huddle-active-pulse rounded-full">
+            <div 
+              className="p-[2.5px] buildr-ring-gradient huddle-active-pulse rounded-full cursor-pointer transition-transform hover:scale-105 active:scale-95"
+              onClick={() => setShowStoryOpen(true)}
+              title="View Live Huddle Story"
+            >
               <div className="w-[80px] h-[80px] rounded-full bg-secondary text-primary flex items-center justify-center font-bold border-4 border-background shrink-0 overflow-hidden text-2xl">
                 {profileUser.avatar_url ? (
                   <img src={profileUser.avatar_url} alt={profileUser.name} className="w-full h-full object-cover" />
@@ -569,11 +632,15 @@ export default function ProfilePage({ params }: ProfilePageProps) {
               </span>
               <span className="text-[11px] text-muted-foreground font-mono font-medium lowercase">builds</span>
             </div>
-            <div className="flex flex-col">
+            <div 
+              className="flex flex-col cursor-pointer hover:opacity-80 active:scale-95 transition-transform" 
+              onClick={() => setShowConnectionsOpen(true)}
+              title="Show Campus Connections"
+            >
               <span className="text-[16px] font-space-grotesk font-extrabold text-foreground leading-tight">
                 182
               </span>
-              <span className="text-[11px] text-muted-foreground font-mono font-medium lowercase">connections</span>
+              <span className="text-[11px] text-muted-foreground font-mono font-medium lowercase border-b border-dashed border-muted-foreground/30">connections</span>
             </div>
             <div className="flex flex-col">
               <span className="text-[16px] font-space-grotesk font-extrabold text-foreground leading-tight">
@@ -636,7 +703,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
               onClick={() => router.push(`/messages/${profileUser.id}`)}
               className="w-full py-2 rounded-xl bg-cyan-500 text-white text-[12px] font-mono font-bold hover:bg-cyan-600 transition-colors shadow-lg shadow-cyan-500/25 animate-pulse"
             >
-              compile secure_connect...
+              message builder
             </button>
           )}
         </div>
@@ -706,12 +773,12 @@ export default function ProfilePage({ params }: ProfilePageProps) {
 
       {/* Detailed Interactive Modal */}
       {selectedPost && (
-        <div className="fixed inset-0 bg-black/85 z-50 flex flex-col justify-center items-center p-4 animate-fade-in">
+        <div className="fixed inset-0 bg-black/85 z-[100] flex flex-col justify-center items-center p-4 animate-fade-in">
           <div className="absolute inset-0 cursor-pointer" onClick={() => setSelectedPost(null)} />
 
           <button
             onClick={() => setSelectedPost(null)}
-            className="absolute top-4 right-4 p-2 text-white bg-black/40 backdrop-blur-md rounded-full border border-white/10 z-50 hover:bg-black/60 transition-colors"
+            className="absolute top-4 right-4 p-2 text-white bg-black/40 backdrop-blur-md rounded-full border border-white/10 z-[100] hover:bg-black/60 transition-colors"
           >
             <X size={20} />
           </button>
@@ -742,7 +809,7 @@ export default function ProfilePage({ params }: ProfilePageProps) {
 
       {/* Preferences bottom sheet drawer */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 bg-black/75 z-50 flex flex-col justify-end animate-fade-in">
+        <div className="fixed inset-0 bg-black/75 z-[100] flex flex-col justify-end animate-fade-in">
           <div className="absolute inset-0 cursor-pointer" onClick={() => setIsSettingsOpen(false)} />
 
           <div className="bg-card border-t border-border rounded-t-[20px] pb-8 relative z-10 w-full sm:max-w-md sm:mx-auto max-h-[80vh] flex flex-col shadow-2xl animate-slide-up">
@@ -814,6 +881,143 @@ export default function ProfilePage({ params }: ProfilePageProps) {
           onClose={() => setIsEditModalOpen(false)}
           onProfileUpdated={fetchProfileAndData}
         />
+      )}
+
+      {/* Campus Connections Modal */}
+      {showConnectionsOpen && (
+        <div className="fixed inset-0 bg-black/80 z-[100] flex flex-col justify-end animate-fade-in">
+          <div className="absolute inset-0 cursor-pointer" onClick={() => setShowConnectionsOpen(false)} />
+          <div className="bg-card border-t border-border rounded-t-[24px] max-h-[80vh] flex flex-col relative z-10 w-full sm:max-w-md sm:mx-auto shadow-2xl overflow-hidden text-foreground">
+            <div className="w-12 h-1.5 bg-border/40 rounded-full mx-auto my-3 shrink-0" />
+            <div className="flex items-center justify-between px-4 pb-3 border-b border-border">
+              <span className="font-space-grotesk font-extrabold text-[16px]">
+                Campus Connections (182)
+              </span>
+              <button
+                onClick={() => setShowConnectionsOpen(false)}
+                className="p-2 -mr-2 text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5 no-scrollbar pb-10">
+              {loadingConnections ? (
+                <div className="flex flex-col gap-3 animate-pulse">
+                  {[1, 2, 3].map((n) => (
+                    <div key={n} className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-secondary" />
+                      <div className="flex-1 bg-secondary h-8 rounded-lg" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                connections.map((conn) => (
+                  <div key={conn.id} className="flex items-center justify-between bg-secondary/25 border border-border/10 p-3 rounded-xl hover:bg-secondary/40 transition-colors">
+                    <div 
+                      className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
+                      onClick={() => {
+                        setShowConnectionsOpen(false);
+                        router.push(`/profile/${conn.id}`);
+                      }}
+                    >
+                      <Avatar user={conn} size="sm" hasStory={false} />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[13px] font-bold text-foreground truncate">{conn.name}</span>
+                        <span className="text-[10px] text-muted-foreground truncate">{conn.college} • {conn.dept}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowConnectionsOpen(false);
+                        router.push(`/messages/${conn.id}`);
+                      }}
+                      className="px-3.5 py-1.5 rounded-full bg-primary text-white text-[11px] font-bold hover:bg-primary/95 transition-colors cursor-pointer"
+                    >
+                      Message
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live Huddle Story Overlay Modal */}
+      {showStoryOpen && (
+        <div className="fixed inset-0 bg-[#070b13] z-[100] flex flex-col justify-between p-4 select-none animate-fade-in text-white font-sans">
+          {/* Progress Bar Container */}
+          <div className="absolute top-3 left-3 right-3 flex gap-1 z-50">
+            <div className="h-1 flex-1 bg-white/20 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-cyan-400 transition-all duration-100 ease-linear rounded-full" 
+                style={{ width: `${storyProgress}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Story Header */}
+          <div className="flex items-center justify-between mt-4 z-40 relative">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-cyan-400 p-[1px]">
+                <div className="w-full h-full rounded-full bg-secondary flex items-center justify-center overflow-hidden">
+                  {profileUser.avatar_url ? (
+                    <img src={profileUser.avatar_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-[10px] font-bold text-cyan-400">{profileUser.initials}</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-white leading-none">{profileUser.name}</span>
+                <span className="text-[9px] text-cyan-400 font-mono mt-0.5">// live_huddle_active</span>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowStoryOpen(false)}
+              className="p-2 text-white/70 hover:text-white rounded-full bg-black/20 backdrop-blur-md cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Story Visual Centerpiece */}
+          <div className="flex-1 flex flex-col items-center justify-center p-4 z-30">
+            <div className="bg-card/25 border border-white/5 rounded-3xl p-6 max-w-sm w-full shadow-2xl backdrop-blur-lg text-center flex flex-col items-center gap-5">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-cyan-500 to-primary flex items-center justify-center text-2xl shadow-lg shadow-cyan-500/20">
+                🚀
+              </div>
+              
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] font-mono tracking-widest text-cyan-400 uppercase">// current_build</span>
+                <h3 className="font-space-grotesk font-extrabold text-lg text-white leading-snug">
+                  {profileUser.build_statement || "No huddle statement posted."}
+                </h3>
+              </div>
+
+              <div className="flex flex-wrap justify-center gap-1.5 mt-2">
+                {profileUser.skills?.map((s) => (
+                  <span key={s} className="text-[9px] font-mono font-bold bg-white/5 border border-white/10 px-2 py-0.5 rounded text-white/80">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Story Footer action */}
+          <div className="flex justify-center mb-6 z-40">
+            <button
+              onClick={() => {
+                setShowStoryOpen(false);
+                router.push(`/messages/${profileUser.id}`);
+              }}
+              className="px-6 py-2.5 rounded-xl bg-white text-black font-extrabold text-[12px] uppercase tracking-wider hover:bg-white/90 transition-colors shadow-lg cursor-pointer flex items-center gap-1.5"
+            >
+              Send Message
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

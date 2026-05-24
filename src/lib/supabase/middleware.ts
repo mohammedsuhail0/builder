@@ -8,30 +8,51 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.next({ request });
   }
   let response = NextResponse.next({ request });
-  const supabase = createServerClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value),
-          );
-          response = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options),
-          );
+  let user = null;
+  let requiresReset = false;
+
+  try {
+    const supabase = createServerClient(
+      env.NEXT_PUBLIC_SUPABASE_URL,
+      env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) =>
+              request.cookies.set(name, value),
+            );
+            response = NextResponse.next({ request });
+            cookiesToSet.forEach(({ name, value, options }) =>
+              response.cookies.set(name, value, options),
+            );
+          },
         },
       },
-    },
-  );
+    );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    if (!env.NEXT_PUBLIC_SUPABASE_URL.includes("dummy")) {
+      const {
+        data: { user: dbUser },
+      } = await supabase.auth.getUser();
+      user = dbUser;
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("requires_password_reset")
+          .eq("id", user.id)
+          .single();
+        if (profile?.requires_password_reset) {
+          requiresReset = true;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Middleware Supabase session check failed, using local offline fallback:", err);
+  }
 
   const pathname = request.nextUrl.pathname;
   const isAuthPath =
@@ -44,18 +65,6 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/projects") ||
     pathname.startsWith("/notifications") ||
     pathname.startsWith("/posts/new");
-
-  let requiresReset = false;
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("requires_password_reset")
-      .eq("id", user.id)
-      .single();
-    if (profile?.requires_password_reset) {
-      requiresReset = true;
-    }
-  }
 
   if (!user && isProtectedPath) {
     const url = request.nextUrl.clone();

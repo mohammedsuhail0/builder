@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, Send } from "lucide-react";
+import { X, Send, Heart } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "@/components/Cards";
 
@@ -33,6 +33,7 @@ export function CommentsDrawer({
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; initials: string } | null>(null);
+  const [commentLikes, setCommentLikes] = useState<Record<string, { liked: boolean; count: number }>>({});
   
   const supabase = createClient();
 
@@ -54,15 +55,65 @@ export function CommentsDrawer({
     }
   };
 
+  // Load comment likes from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("buildr_comment_likes");
+      if (stored) {
+        try {
+          setCommentLikes(JSON.parse(stored));
+        } catch (_) {}
+      }
+    }
+  }, [postId]);
+
+  const handleLikeComment = (commentId: string) => {
+    if (typeof window === "undefined") return;
+    setCommentLikes((prev) => {
+      const current = prev[commentId] || { liked: false, count: 0 };
+      const nextLiked = !current.liked;
+      const nextCount = nextLiked ? current.count + 1 : Math.max(0, current.count - 1);
+      
+      const updated = {
+        ...prev,
+        [commentId]: { liked: nextLiked, count: nextCount }
+      };
+      
+      localStorage.setItem("buildr_comment_likes", JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const syncComments = async () => {
     try {
       const res = await fetch(`/api/comments?postId=${encodeURIComponent(postId)}`, { cache: "no-store" });
       if (res.ok) {
         const json = await res.json();
-        setComments(Array.isArray(json.data) ? json.data : []);
+        const apiComments = Array.isArray(json.data) ? json.data : [];
+        
+        // Merge with local comments if any
+        const localData = typeof window !== "undefined" ? localStorage.getItem(`buildr_comments_${postId}`) : null;
+        const localComments = localData ? JSON.parse(localData) : [];
+        
+        const combined = [...apiComments];
+        localComments.forEach((lc: Comment) => {
+          if (!combined.some(c => c.id === lc.id)) {
+            combined.push(lc);
+          }
+        });
+        combined.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        setComments(combined);
+      } else {
+        // Fallback to local storage
+        const localData = typeof window !== "undefined" ? localStorage.getItem(`buildr_comments_${postId}`) : null;
+        const localComments = localData ? JSON.parse(localData) : [];
+        setComments(localComments);
       }
     } catch (err) {
-      console.error("Error fetching comments:", err);
+      console.error("Error fetching comments, falling back to localStorage:", err);
+      const localData = typeof window !== "undefined" ? localStorage.getItem(`buildr_comments_${postId}`) : null;
+      const localComments = localData ? JSON.parse(localData) : [];
+      setComments(localComments);
     } finally {
       setLoading(false);
     }
@@ -94,6 +145,24 @@ export function CommentsDrawer({
     const text = newComment.trim();
     setNewComment("");
 
+    const tempId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+    const localCommentObj: Comment = {
+      id: tempId,
+      post_id: postId,
+      author_id: currentUser?.id || "local-user",
+      text,
+      created_at: new Date().toISOString(),
+      profiles: currentUser ? {
+        id: currentUser.id,
+        name: currentUser.name,
+        avatar_url: null,
+      } : {
+        id: "local-user",
+        name: "builder",
+        avatar_url: null,
+      }
+    };
+
     try {
       const res = await fetch("/api/comments", {
         method: "POST",
@@ -102,20 +171,36 @@ export function CommentsDrawer({
       });
 
       if (res.ok) {
-        // Dispatch custom event for cross-component reloads
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("buildr_comment_added", { detail: { postId } }));
         }
         await syncComments();
         onCommentAdded();
+      } else {
+        console.warn("API comment creation failed, saving to local storage fallback");
+        saveLocalComment(localCommentObj);
       }
     } catch (err) {
-      console.error("Failed to add comment:", err);
+      console.error("Failed to add comment, saving to local storage fallback:", err);
+      saveLocalComment(localCommentObj);
+    }
+  };
+
+  const saveLocalComment = (comment: Comment) => {
+    if (typeof window !== "undefined") {
+      const localData = localStorage.getItem(`buildr_comments_${postId}`);
+      const localComments = localData ? JSON.parse(localData) : [];
+      localComments.push(comment);
+      localStorage.setItem(`buildr_comments_${postId}`, JSON.stringify(localComments));
+      
+      window.dispatchEvent(new CustomEvent("buildr_comment_added", { detail: { postId } }));
+      syncComments();
+      onCommentAdded();
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex flex-col justify-end">
+    <div className="fixed inset-0 bg-black/70 z-[100] flex flex-col justify-end">
       {/* Backdrop click close */}
       <div className="absolute inset-0 cursor-pointer" onClick={onClose} />
 
@@ -156,8 +241,11 @@ export function CommentsDrawer({
             comments.map((comment) => {
               const authorName = comment.profiles?.name || "builder";
               const authorInitials = getInitials(authorName);
+              const isLiked = commentLikes[comment.id]?.liked || false;
+              const likeCount = commentLikes[comment.id]?.count || 0;
+              
               return (
-                <div key={comment.id} className="flex gap-3 items-start">
+                <div key={comment.id} className="flex gap-3 items-start animate-fade-in">
                   <Avatar 
                     user={{ 
                       id: comment.author_id, 
@@ -169,14 +257,32 @@ export function CommentsDrawer({
                     size="sm" 
                     hasStory={false} 
                   />
-                  <div className="flex flex-col flex-1 bg-secondary/40 rounded-[18px] px-4 py-2.5 border border-border/10">
+                  <div className="flex flex-col flex-1 bg-secondary/40 rounded-[18px] px-4 py-2.5 border border-border/10 relative">
                     <div className="flex items-center justify-between">
                       <span className="text-[13px] font-bold text-foreground leading-none">
                         {authorName}
                       </span>
                       <span className="text-[11px] text-muted-foreground">{formatTimestamp(comment.created_at)}</span>
                     </div>
-                    <p className="text-[13px] text-foreground/90 mt-2 leading-relaxed">{comment.text}</p>
+                    <p className="text-[13px] text-foreground/90 mt-2 leading-relaxed pr-8">{comment.text}</p>
+                    
+                    {/* Heart Like Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleLikeComment(comment.id)}
+                      className={`absolute right-3.5 bottom-2.5 flex items-center gap-1 text-[10px] font-mono font-bold transition-all transform active:scale-75 hover:scale-105 cursor-pointer ${
+                        isLiked 
+                          ? "text-rose-500 animate-spark-pop" 
+                          : "text-muted-foreground hover:text-rose-400"
+                      }`}
+                      title={isLiked ? "Unlike input" : "Like input"}
+                    >
+                      <Heart 
+                        size={12} 
+                        className={`${isLiked ? "fill-rose-500 stroke-rose-500 animate-spark-pop" : "stroke-[2.5]"}`} 
+                      />
+                      {likeCount > 0 && <span>{likeCount}</span>}
+                    </button>
                   </div>
                 </div>
               );
