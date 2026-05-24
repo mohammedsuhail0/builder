@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimit, errorJson, okJson, preflight, validateBody } from "@/lib/api-security";
 
 const projectSchema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -9,19 +9,18 @@ const projectSchema = z.object({
   originPostId: z.string().uuid().optional(),
 });
 
-export async function GET() {
+export async function OPTIONS(request: Request) {
+  return preflight(request);
+}
+
+export async function GET(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const rl = await checkRateLimit(`project:${user.id}`, 6, 60_000);
-  if (!rl.ok) {
-    return NextResponse.json(
-      { error: `Rate limit exceeded. Retry in ${rl.retryAfterSec}s.` },
-      { status: 429 },
-    );
-  }
+  if (!user) return errorJson("UNAUTHORIZED", 401, "Unauthorized", request);
+  const rlRes = await enforceRateLimit(`project:${user.id}`, "general", request);
+  if (rlRes) return rlRes;
 
   const { data, error } = await supabase
     .from("projects")
@@ -29,8 +28,8 @@ export async function GET() {
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(50);
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  return NextResponse.json({ data });
+  if (error) return errorJson("PROJECTS_FETCH_FAILED", 400, "Failed to fetch projects.", request);
+  return okJson({ data }, request);
 }
 
 export async function POST(request: Request) {
@@ -38,21 +37,14 @@ export async function POST(request: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user) return errorJson("UNAUTHORIZED", 401, "Unauthorized", request);
 
-  const rl = await checkRateLimit(`project-create:${user.id}`, 3, 60_000);
-  if (!rl.ok) {
-    return NextResponse.json(
-      { error: `Rate limit exceeded. Retry in ${rl.retryAfterSec}s.` },
-      { status: 429 },
-    );
-  }
+  const rlRes = await enforceRateLimit(`project-create:${user.id}`, "upload", request);
+  if (rlRes) return rlRes;
 
   const raw = await request.json();
-  const parsed = projectSchema.safeParse(raw);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
+  const parsed = validateBody(projectSchema, raw);
+  if (!parsed.ok) return parsed.response;
 
   const { data: project, error } = await supabase
     .from("projects")
@@ -65,7 +57,7 @@ export async function POST(request: Request) {
     .select("id")
     .single();
   if (error || !project) {
-    return NextResponse.json({ error: error?.message ?? "Create failed" }, { status: 400 });
+    return errorJson("PROJECT_CREATE_FAILED", 400, "Failed to create project.", request);
   }
 
   await supabase.from("project_members").insert({
@@ -74,5 +66,5 @@ export async function POST(request: Request) {
     role: "founder",
   });
 
-  return NextResponse.json({ ok: true, projectId: project.id }, { status: 201 });
+  return okJson({ ok: true, projectId: project.id }, request, { status: 201 });
 }

@@ -1,14 +1,21 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimit, errorJson, okJson, preflight, validateBody } from "@/lib/api-security";
 
 const createPostSchema = z.object({
   title: z.string().trim().min(1).max(100),
   description: z.string().trim().min(1).max(1000),
   skillsNeeded: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
-  imageUrls: z.array(z.string().trim().min(1)).max(4).default([]),
+  imageUrls: z
+    .array(z.string().trim().regex(/^posts\/[A-Za-z0-9._/-]+$/))
+    .max(4)
+    .default([]),
 });
+
+export async function OPTIONS(request: Request) {
+  return preflight(request);
+}
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -17,15 +24,10 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return errorJson("UNAUTHORIZED", 401, "Unauthorized", request);
   }
-  const rl = await checkRateLimit(`post:${user.id}`, 12, 60_000);
-  if (!rl.ok) {
-    return NextResponse.json(
-      { error: `Rate limit exceeded. Retry in ${rl.retryAfterSec}s.` },
-      { status: 429 },
-    );
-  }
+  const rlRes = await enforceRateLimit(`post:${user.id}`, "general", request);
+  if (rlRes) return rlRes;
 
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") ?? "1");
@@ -43,10 +45,10 @@ export async function GET(request: Request) {
     .range(from, to);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return errorJson("POSTS_FETCH_FAILED", 400, "Failed to fetch posts.", request);
   }
 
-  return NextResponse.json({ data });
+  return okJson({ data }, request);
 }
 
 export async function POST(request: Request) {
@@ -56,22 +58,15 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return errorJson("UNAUTHORIZED", 401, "Unauthorized", request);
   }
 
-  const rl = await checkRateLimit(`post-create:${user.id}`, 5, 60_000);
-  if (!rl.ok) {
-    return NextResponse.json(
-      { error: `Rate limit exceeded. Retry in ${rl.retryAfterSec}s.` },
-      { status: 429 },
-    );
-  }
+  const rlRes = await enforceRateLimit(`post-create:${user.id}`, "upload", request);
+  if (rlRes) return rlRes;
 
   const raw = await request.json();
-  const parsed = createPostSchema.safeParse(raw);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
+  const parsed = validateBody(createPostSchema, raw);
+  if (!parsed.ok) return parsed.response;
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
@@ -81,7 +76,7 @@ export async function POST(request: Request) {
 
   if (profileError || !profile) {
     return NextResponse.json(
-      { error: "Complete onboarding profile first." },
+      { error: "Complete onboarding profile first.", code: "PROFILE_INCOMPLETE" },
       { status: 400 },
     );
   }
@@ -99,7 +94,7 @@ export async function POST(request: Request) {
     .single();
 
   if (postError || !post) {
-    return NextResponse.json({ error: postError?.message }, { status: 400 });
+    return errorJson("POST_CREATE_FAILED", 400, "Failed to create post.", request);
   }
 
   const { error: tsError } = await supabase.from("idea_timestamps").insert({
@@ -110,8 +105,8 @@ export async function POST(request: Request) {
   });
 
   if (tsError) {
-    return NextResponse.json({ error: tsError.message }, { status: 400 });
+    return errorJson("TIMESTAMP_CREATE_FAILED", 400, "Failed to create timestamp.", request);
   }
 
-  return NextResponse.json({ ok: true, postId: post.id }, { status: 201 });
+  return okJson({ ok: true, postId: post.id }, request, { status: 201 });
 }

@@ -1,40 +1,37 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { checkRateLimit } from "@/lib/rate-limit";
 import { encryptText } from "@/lib/crypto";
+import { enforceRateLimit, errorJson, okJson, preflight, validateBody } from "@/lib/api-security";
 
 const messageSchema = z.object({
   recipientId: z.string().uuid(),
   content: z.string().trim().min(1).max(2000),
 });
 
+export async function OPTIONS(request: Request) {
+  return preflight(request);
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const rl = await checkRateLimit(`dm:${user.id}`, 20, 60_000);
-  if (!rl.ok) {
-    return NextResponse.json(
-      { error: `Rate limit exceeded. Retry in ${rl.retryAfterSec}s.` },
-      { status: 429 },
-    );
-  }
+  if (!user) return errorJson("UNAUTHORIZED", 401, "Unauthorized", request);
+  const rlRes = await enforceRateLimit(`dm:${user.id}`, "dm", request);
+  if (rlRes) return rlRes;
 
   const raw = await request.json();
-  const parsed = messageSchema.safeParse(raw);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
+  const parsed = validateBody(messageSchema, raw);
+  if (!parsed.ok) return parsed.response;
 
   const { error } = await supabase.from("messages").insert({
     sender_id: user.id,
     recipient_id: parsed.data.recipientId,
     content: encryptText(parsed.data.content),
   });
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) return errorJson("MESSAGE_CREATE_FAILED", 400, "Failed to send message.", request);
 
   await supabase.from("notifications").insert({
     user_id: parsed.data.recipientId,
@@ -44,5 +41,5 @@ export async function POST(request: Request) {
     payload: { from: user.id },
   });
 
-  return NextResponse.json({ ok: true });
+  return okJson({ ok: true }, request);
 }

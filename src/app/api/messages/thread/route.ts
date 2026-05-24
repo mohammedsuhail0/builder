@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { decryptText } from "@/lib/crypto";
+import { enforceRateLimit, errorJson, okJson, preflight } from "@/lib/api-security";
+
+export async function OPTIONS(request: Request) {
+  return preflight(request);
+}
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -9,11 +15,17 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return errorJson("UNAUTHORIZED", 401, "Unauthorized", request);
   }
+  const rlRes = await enforceRateLimit(`thread:${user.id}`, "general", request);
+  if (rlRes) return rlRes;
 
   const { searchParams } = new URL(request.url);
-  const partnerId = searchParams.get("userId");
+  const partnerIdRaw = searchParams.get("userId");
+  const partnerId =
+    partnerIdRaw && z.string().uuid().safeParse(partnerIdRaw).success
+      ? partnerIdRaw
+      : null;
 
   // Case 1: Fetch chat thread with a specific partner
   if (partnerId) {
@@ -27,7 +39,7 @@ export async function GET(request: Request) {
       .limit(300);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return errorJson("THREAD_FETCH_FAILED", 400, "Failed to fetch thread.", request);
     }
 
     const decrypted = (messages || []).map((m) => ({
@@ -41,7 +53,7 @@ export async function GET(request: Request) {
       }),
     }));
 
-    return NextResponse.json(decrypted);
+    return okJson(decrypted, request);
   }
 
   // Case 2: Fetch all DM channels / conversations
@@ -52,7 +64,7 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false });
 
   if (msgsError) {
-    return NextResponse.json({ error: msgsError.message }, { status: 400 });
+    return errorJson("MESSAGES_FETCH_FAILED", 400, "Failed to fetch messages.", request);
   }
 
   // Group by partner ID to find unique channels
@@ -70,7 +82,7 @@ export async function GET(request: Request) {
 
   const partnerIds = Array.from(conversationsMap.keys());
   if (partnerIds.length === 0) {
-    return NextResponse.json([]);
+    return okJson([], request);
   }
 
   const { data: partners, error: partnersError } = await supabase
@@ -79,7 +91,7 @@ export async function GET(request: Request) {
     .in("id", partnerIds);
 
   if (partnersError) {
-    return NextResponse.json({ error: partnersError.message }, { status: 400 });
+    return errorJson("PARTNERS_FETCH_FAILED", 400, "Failed to fetch conversations.", request);
   }
 
   const result = (partners || []).map((p) => {
@@ -106,5 +118,5 @@ export async function GET(request: Request) {
     };
   }).sort((a, b) => b.timestampNum - a.timestampNum);
 
-  return NextResponse.json(result);
+  return okJson(result, request);
 }
