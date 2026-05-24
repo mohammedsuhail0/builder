@@ -45,13 +45,33 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/notifications") ||
     pathname.startsWith("/posts/new");
 
+  let requiresReset = false;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("requires_password_reset")
+      .eq("id", user.id)
+      .single();
+    if (profile?.requires_password_reset) {
+      requiresReset = true;
+    }
+  }
+
   if (!user && isProtectedPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
     return NextResponse.redirect(url);
   }
 
-  if (user && isAuthPath) {
+  // If user needs a reset, force them to the reset page
+  if (user && requiresReset && pathname !== "/auth/reset-password") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/reset-password";
+    return NextResponse.redirect(url);
+  }
+
+  // If user does not need a reset, prevent access to auth pages
+  if (user && !requiresReset && isAuthPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/feed";
     return NextResponse.redirect(url);
