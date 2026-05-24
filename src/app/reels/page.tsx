@@ -6,7 +6,9 @@ import { Zap, MessageCircle, Send, Bookmark, Music, Play, Pause, ChevronLeft } f
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar, UIPost, UIUser } from "@/components/Cards";
-import { CommentsDrawer } from "../feed/page";
+import { CommentsDrawer } from "@/components/CommentsDrawer";
+
+const supabase = createClient();
 
 const LOOP_BG_GRADIENTS = [
   "from-[#0b0f19] via-[#111c30] to-[#0b0f19]",
@@ -85,7 +87,6 @@ export default function ReelsPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  const supabase = createClient();
 
   const syncUpdates = async () => {
     try {
@@ -116,7 +117,7 @@ export default function ReelsPage() {
             created_at: p.created_at,
             author_id: p.author_id,
             profiles: profile,
-            likes: 15,
+            likes: 0,
             comments: 0,
           };
         });
@@ -126,30 +127,53 @@ export default function ReelsPage() {
       const combined = [...finalPosts, ...fallbackLoopsPosts];
       const unique = combined.filter((v, i, a) => a.findIndex((t) => t.id === v.id) === i);
 
-      // Sync comments count from localStorage overlays
-      const uniqueWithComments = unique.map((post) => {
-        let localCount = 0;
-        if (typeof window !== "undefined") {
-          const localCommentsStr = localStorage.getItem(`buildr_comments_${post.id}`);
-          if (localCommentsStr) {
-            try {
-              localCount = JSON.parse(localCommentsStr).length;
-            } catch (_) {}
-          }
-        }
-        const baseComments = post.comments || 0;
-        return {
-          ...post,
-          comments: baseComments + localCount,
-        };
-      });
+      // Batch query reactions and comments from database via endpoints to avoid localStorage
+      const postIds = unique.map((p) => p.id).join(",");
+      let rxCounts: Record<string, number> = {};
+      let rxLiked: Record<string, boolean> = {};
+      let cmCounts: Record<string, number> = {};
 
-      setUpdates(uniqueWithComments);
+      if (postIds) {
+        try {
+          const [rxRes, cmPromises] = await Promise.all([
+            fetch(`/api/reactions?ids=${encodeURIComponent(postIds)}`, { cache: "no-store" }),
+            Promise.all(
+              unique.map((p) =>
+                fetch(`/api/comments?postId=${encodeURIComponent(p.id)}`, { cache: "no-store" })
+                  .then((r) => (r.ok ? r.json() : { data: [] }))
+                  .catch(() => ({ data: [] }))
+              )
+            ),
+          ]);
+
+          if (rxRes.ok) {
+            const rxData = await rxRes.json();
+            rxCounts = rxData.counts || {};
+            rxLiked = rxData.liked || {};
+          }
+
+          unique.forEach((p, idx) => {
+            const cmData = cmPromises[idx];
+            cmCounts[p.id] = Array.isArray(cmData?.data) ? cmData.data.length : 0;
+          });
+        } catch (err) {
+          console.error("Error loading reels social stats:", err);
+        }
+      }
+
+      const mappedReels = unique.map((post) => ({
+        ...post,
+        likes: rxCounts[post.id] ?? 0,
+        liked: rxLiked[post.id] ?? false,
+        comments: cmCounts[post.id] ?? 0,
+      }));
+
+      setUpdates(mappedReels);
 
       // Sync saved maps
       if (typeof window !== "undefined") {
         const savedMap: Record<string, boolean> = {};
-        uniqueWithComments.forEach((post) => {
+        mappedReels.forEach((post) => {
           savedMap[post.id] = localStorage.getItem(`buildr_saved_${post.id}`) === "true";
         });
         setSavedPosts(savedMap);
@@ -157,10 +181,7 @@ export default function ReelsPage() {
     } catch (err) {
       console.error("Error synchronizing reels page updates:", err);
     } finally {
-      // Small artificial timeout so skeleton screen shimmer is beautifully visible and feels organic
-      setTimeout(() => {
-        setLoading(false);
-      }, 600);
+      setLoading(false);
     }
   };
 
@@ -168,34 +189,40 @@ export default function ReelsPage() {
     syncUpdates();
   }, []);
 
-  const handleLike = (postId: string) => {
-    if (typeof window === "undefined") return;
-    const likedKey = `buildr_liked_${postId}`;
-    const wasLiked = localStorage.getItem(likedKey) === "true";
+  const handleLike = async (postId: string) => {
+    const post = updates.find((p) => p.id === postId);
+    if (!post) return;
+
+    const nextLiked = !post.liked;
+    const delta = nextLiked ? 1 : -1;
 
     setUpdates((prev) =>
-      prev.map((post) => {
-        if (post.id === postId) {
-          const originalLikes = post.likes || 0;
-          if (wasLiked) {
-            localStorage.setItem(likedKey, "false");
-            return { ...post, likes: Math.max(0, originalLikes - 1) };
-          } else {
-            localStorage.setItem(likedKey, "true");
-            return { ...post, likes: originalLikes + 1 };
-          }
+      prev.map((p) => {
+        if (p.id === postId) {
+          return {
+            ...p,
+            liked: nextLiked,
+            likes: Math.max(0, (p.likes || 0) + delta),
+          };
         }
-        return post;
-      }),
+        return p;
+      })
     );
+
+    try {
+      await fetch("/api/reactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId, liked: nextLiked }),
+      });
+    } catch (err) {
+      console.error("Error liking reel:", err);
+    }
   };
 
   const handleDoubleTap = (postId: string) => {
-    if (typeof window === "undefined") return;
-    const likedKey = `buildr_liked_${postId}`;
-    const wasLiked = localStorage.getItem(likedKey) === "true";
-
-    if (!wasLiked) {
+    const post = updates.find((p) => p.id === postId);
+    if (post && !post.liked) {
       handleLike(postId);
     }
 

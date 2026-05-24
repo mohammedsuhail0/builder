@@ -16,9 +16,10 @@ interface DMThread {
   timestampNum: number;
 }
 
+const supabase = createClient();
+
 export default function DMsPage() {
   const router = useRouter();
-  const supabase = createClient();
   const [dms, setDms] = useState<DMThread[]>([]);
   const [activeBuilders, setActiveBuilders] = useState<UIUser[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -70,9 +71,7 @@ export default function DMsPage() {
     } catch (err) {
       console.error("Error fetching message data:", err);
     } finally {
-      setTimeout(() => {
-        setLoading(false);
-      }, 500);
+      setLoading(false);
     }
   };
 

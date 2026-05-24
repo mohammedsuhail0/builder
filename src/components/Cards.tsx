@@ -40,6 +40,7 @@ export type UIPost = {
   comments?: number;
   isRequested?: boolean;
   is_requested?: boolean;
+  liked?: boolean;
   author_id?: string;
   profiles?: UIUser | null;
   author?: UIUser; // fallback
@@ -219,7 +220,7 @@ const getDescription = (post: UIPost): string => {
 };
 
 const getLikesCount = (post: UIPost): number => {
-  return typeof post.likes === "number" ? post.likes : 12;
+  return typeof post.likes === "number" ? post.likes : 0;
 };
 
 const getCommentsCount = (post: UIPost): number => {
@@ -270,62 +271,27 @@ export function IdeaCard({
   const [commentCount, setCommentCount] = useState(getCommentsCount(post));
   const router = useRouter();
 
-  // Sync comment count from localStorage
-  const syncCommentCount = React.useCallback(() => {
-    if (typeof window !== "undefined") {
-      const localComments = localStorage.getItem(`buildr_comments_${post.id}`);
-      if (localComments) {
-        try {
-          const arr = JSON.parse(localComments);
-          if (Array.isArray(arr)) {
-            setCommentCount(getCommentsCount(post) + arr.length);
-          }
-        } catch (_) {}
-      } else {
-        setCommentCount(getCommentsCount(post));
-      }
-    }
-  }, [post]);
-
-  // Load dynamic likes & saves from local overlay to avoid RLS restrictions
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const wasLiked = localStorage.getItem(`buildr_liked_${post.id}`) === "true";
-      const wasSaved = localStorage.getItem(`buildr_saved_${post.id}`) === "true";
-      setLiked(wasLiked);
-
-      // Adjust like count based on local storage delta
-      const originalLikes = getLikesCount(post);
-      const delta = wasLiked ? 1 : 0;
-      setLikesCount(originalLikes + delta);
-
-      setSaved(wasSaved);
-      syncCommentCount();
-    }
-  }, [post, syncCommentCount]);
-
-  // Listen to storage events so comment count updates instantly when CommentsDrawer adds a comment
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === `buildr_comments_${post.id}`) {
-        syncCommentCount();
+    const load = async () => {
+      const [rxRes, cmRes] = await Promise.all([
+        fetch(`/api/reactions?ids=${encodeURIComponent(post.id)}`, { cache: "no-store" }),
+        fetch(`/api/comments?postId=${encodeURIComponent(post.id)}`, { cache: "no-store" }),
+      ]);
+      if (rxRes.ok) {
+        const rx = await rxRes.json();
+        setLikesCount(rx?.counts?.[post.id] ?? getLikesCount(post));
+        setLiked(Boolean(rx?.liked?.[post.id]));
+      }
+      if (cmRes.ok) {
+        const cm = await cmRes.json();
+        setCommentCount(Array.isArray(cm?.data) ? cm.data.length : getCommentsCount(post));
+      }
+      if (typeof window !== "undefined") {
+        setSaved(localStorage.getItem(`buildr_saved_${post.id}`) === "true");
       }
     };
-    window.addEventListener("storage", handleStorage);
-    // Also listen to a custom event dispatched from same-tab comment submissions
-    const handleCustom = (e: Event) => {
-      const ce = e as CustomEvent;
-      if (ce.detail?.postId === post.id) {
-        syncCommentCount();
-      }
-    };
-    window.addEventListener("buildr_comment_added", handleCustom);
-    return () => {
-      window.removeEventListener("storage", handleStorage);
-      window.removeEventListener("buildr_comment_added", handleCustom);
-    };
-  }, [post.id, syncCommentCount]);
+    load();
+  }, [post.id, post.likes, post.comments]);
 
   const handleLike = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -334,9 +300,11 @@ export function IdeaCard({
     const delta = nextLiked ? 1 : -1;
     setLikesCount((prev) => Math.max(0, prev + delta));
 
-    if (typeof window !== "undefined") {
-      localStorage.setItem(`buildr_liked_${post.id}`, nextLiked ? "true" : "false");
-    }
+    fetch("/api/reactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: post.id, liked: nextLiked }),
+    }).catch(() => undefined);
 
     if (onLikeToggle) onLikeToggle();
   };
@@ -527,60 +495,27 @@ export function UpdateCard({
   const [commentCount, setCommentCount] = useState(getCommentsCount(post));
   const router = useRouter();
 
-  // Sync comment count from localStorage
-  const syncCommentCount = React.useCallback(() => {
-    if (typeof window !== "undefined") {
-      const localComments = localStorage.getItem(`buildr_comments_${post.id}`);
-      if (localComments) {
-        try {
-          const arr = JSON.parse(localComments);
-          if (Array.isArray(arr)) {
-            setCommentCount(getCommentsCount(post) + arr.length);
-          }
-        } catch (_) {}
-      } else {
-        setCommentCount(getCommentsCount(post));
-      }
-    }
-  }, [post]);
-
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const wasLiked = localStorage.getItem(`buildr_liked_${post.id}`) === "true";
-      const wasSaved = localStorage.getItem(`buildr_saved_${post.id}`) === "true";
-      setLiked(wasLiked);
-
-      const originalLikes = getLikesCount(post);
-      const delta = wasLiked ? 1 : 0;
-      setLikesCount(originalLikes + delta);
-
-      setSaved(wasSaved);
-      syncCommentCount();
-    }
-  }, [post, syncCommentCount]);
-
-  // Listen to storage events so comment count updates instantly when CommentsDrawer adds a comment
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === `buildr_comments_${post.id}`) {
-        syncCommentCount();
+    const load = async () => {
+      const [rxRes, cmRes] = await Promise.all([
+        fetch(`/api/reactions?ids=${encodeURIComponent(post.id)}`, { cache: "no-store" }),
+        fetch(`/api/comments?postId=${encodeURIComponent(post.id)}`, { cache: "no-store" }),
+      ]);
+      if (rxRes.ok) {
+        const rx = await rxRes.json();
+        setLikesCount(rx?.counts?.[post.id] ?? getLikesCount(post));
+        setLiked(Boolean(rx?.liked?.[post.id]));
+      }
+      if (cmRes.ok) {
+        const cm = await cmRes.json();
+        setCommentCount(Array.isArray(cm?.data) ? cm.data.length : getCommentsCount(post));
+      }
+      if (typeof window !== "undefined") {
+        setSaved(localStorage.getItem(`buildr_saved_${post.id}`) === "true");
       }
     };
-    window.addEventListener("storage", handleStorage);
-    // Also listen to a custom event dispatched from same-tab comment submissions
-    const handleCustom = (e: Event) => {
-      const ce = e as CustomEvent;
-      if (ce.detail?.postId === post.id) {
-        syncCommentCount();
-      }
-    };
-    window.addEventListener("buildr_comment_added", handleCustom);
-    return () => {
-      window.removeEventListener("storage", handleStorage);
-      window.removeEventListener("buildr_comment_added", handleCustom);
-    };
-  }, [post.id, syncCommentCount]);
+    load();
+  }, [post.id, post.likes, post.comments]);
 
   const handleLike = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -589,9 +524,11 @@ export function UpdateCard({
     const delta = nextLiked ? 1 : -1;
     setLikesCount((prev) => Math.max(0, prev + delta));
 
-    if (typeof window !== "undefined") {
-      localStorage.setItem(`buildr_liked_${post.id}`, nextLiked ? "true" : "false");
-    }
+    fetch("/api/reactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId: post.id, liked: nextLiked }),
+    }).catch(() => undefined);
 
     if (onLikeToggle) onLikeToggle();
   };

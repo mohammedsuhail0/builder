@@ -22,10 +22,11 @@ interface ChatPageProps {
   params: Promise<{ userId: string }>;
 }
 
+const supabase = createClient();
+
 export default function ChatPage({ params }: ChatPageProps) {
   const { userId } = use(params);
   const router = useRouter();
-  const supabase = createClient();
 
   const [msg, setMsg] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -87,9 +88,7 @@ export default function ChatPage({ params }: ChatPageProps) {
     } catch (err) {
       console.error("Error loading chat details:", err);
     } finally {
-      setTimeout(() => {
-        setLoading(false);
-      }, 500);
+      setLoading(false);
     }
   };
 

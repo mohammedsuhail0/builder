@@ -7,7 +7,9 @@ import Masonry, { ResponsiveMasonry } from "react-responsive-masonry";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar, IdeaCard, UpdateCard, UIPost, UIUser } from "@/components/Cards";
-import { CommentsDrawer } from "../feed/page";
+import { CommentsDrawer } from "@/components/CommentsDrawer";
+const supabase = createClient();
+
 
 const CHIPS = ["For You", "Trending", "React", "Node.js", "Figma", "Embedded", "CAD"];
 
@@ -105,7 +107,6 @@ export default function ExplorePage() {
   const [followedMap, setFollowedMap] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const supabase = createClient();
 
   const syncData = async () => {
     try {
@@ -116,8 +117,9 @@ export default function ExplorePage() {
         .select("id,name,college,department,year,skills,avatar_url,build_statement")
         .limit(10);
 
+      let formatted: UIUser[] = [];
       if (dbProfiles && dbProfiles.length > 0) {
-        const formatted: UIUser[] = dbProfiles.map((p) => ({
+        formatted = dbProfiles.map((p) => ({
           id: p.id,
           name: p.name,
           college: p.college,
@@ -152,15 +154,6 @@ export default function ExplorePage() {
       if (dbPosts && dbPosts.length > 0) {
         finalPosts = dbPosts.map((p) => {
           const profile = p.profiles as unknown as UIUser | null;
-          let localCount = 0;
-          if (typeof window !== "undefined") {
-            const localCommentsStr = localStorage.getItem(`buildr_comments_${p.id}`);
-            if (localCommentsStr) {
-              try {
-                localCount = JSON.parse(localCommentsStr).length;
-              } catch (_) {}
-            }
-          }
           return {
             id: p.id,
             type: "idea",
@@ -171,8 +164,8 @@ export default function ExplorePage() {
             created_at: p.created_at,
             author_id: p.author_id,
             profiles: profile,
-            likes: 12,
-            comments: localCount,
+            likes: 0,
+            comments: 0,
           };
         });
       }
@@ -184,50 +177,37 @@ export default function ExplorePage() {
           try {
             const localArr = JSON.parse(localPostsStr);
             if (Array.isArray(localArr)) {
-              // Map local comments count for newly added local storage posts too
-              const mappedLocalArr = localArr.map((post) => {
-                let localCount = 0;
-                const localCommentsStr = localStorage.getItem(`buildr_comments_${post.id}`);
-                if (localCommentsStr) {
-                  try {
-                    localCount = JSON.parse(localCommentsStr).length;
-                  } catch (_) {}
-                }
-                return {
-                  ...post,
-                  comments: localCount
-                };
-              });
+              const mappedLocalArr = localArr.map((post) => ({
+                ...post,
+                likes: 0,
+                comments: 0
+              }));
               finalPosts = [...mappedLocalArr, ...finalPosts];
             }
           } catch (_) {}
         }
+      }
 
-        // Load followed status
-        const localFollowed = localStorage.getItem("buildr_followed_map");
-        if (localFollowed) {
-          try {
-            setFollowedMap(JSON.parse(localFollowed));
-          } catch (_) {}
+      // Load followed status via API
+      const checkUsers = formatted.length > 0 ? formatted : fallbackExploreUsers;
+      const uids = checkUsers.map((u) => u.id).join(",");
+      if (uids) {
+        try {
+          const folRes = await fetch(`/api/follows?ids=${encodeURIComponent(uids)}`);
+          if (folRes.ok) {
+            const folData = await folRes.json();
+            setFollowedMap(folData.following || {});
+          }
+        } catch (err) {
+          console.error("Error loading follow states:", err);
         }
       }
 
-      // Map local comments count on fallbacks as well
-      const mappedFallbacks = fallbackExplorePosts.map((p) => {
-        let localCount = 0;
-        if (typeof window !== "undefined") {
-          const localCommentsStr = localStorage.getItem(`buildr_comments_${p.id}`);
-          if (localCommentsStr) {
-            try {
-              localCount = JSON.parse(localCommentsStr).length;
-            } catch (_) {}
-          }
-        }
-        return {
-          ...p,
-          comments: (p.comments || 0) + localCount
-        };
-      });
+      const mappedFallbacks = fallbackExplorePosts.map((p) => ({
+        ...p,
+        likes: 0,
+        comments: 0
+      }));
 
       const combined = [...finalPosts, ...mappedFallbacks];
       const unique = combined.filter((v, i, a) => a.findIndex((t) => t.id === v.id) === i);
@@ -252,13 +232,20 @@ export default function ExplorePage() {
     setSuggestions((prev) => prev.filter((u) => u.id !== id));
   };
 
-  const handleToggleFollow = (id: string) => {
-    const nextMap = { ...followedMap, [id]: !followedMap[id] };
-    setFollowedMap(nextMap);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("buildr_followed_map", JSON.stringify(nextMap));
+  const handleToggleFollow = async (id: string) => {
+    const nextFollowing = !followedMap[id];
+    setFollowedMap((prev) => ({ ...prev, [id]: nextFollowing }));
+    try {
+      await fetch("/api/follows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId: id, following: nextFollowing }),
+      });
+    } catch (err) {
+      console.error("Error toggling follow status:", err);
     }
   };
+
 
   // Filter posts based on search input & chip
   const filteredPosts = posts.filter((post) => {

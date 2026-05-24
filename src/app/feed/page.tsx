@@ -8,202 +8,8 @@ import { createClient } from "@/lib/supabase/client";
 import { Avatar, IdeaCard, UpdateCard, UIPost, UIUser } from "@/components/Cards";
 
 
-type Comment = {
-  id: string;
-  author: {
-    name: string;
-    avatar_url?: string | null;
-    avatar?: string;
-    initials: string;
-  };
-  text: string;
-  timestamp: string;
-};
+import { CommentsDrawer } from "@/components/CommentsDrawer";
 
-export function CommentsDrawer({
-  postId,
-  onClose,
-  onCommentAdded,
-}: {
-  postId: string;
-  onClose: () => void;
-  onCommentAdded: () => void;
-}) {
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [newComment, setNewComment] = useState("");
-  const [currentUser, setCurrentUser] = useState<{ name: string; initials: string } | null>(null);
-  const supabase = createClient();
-
-  const syncComments = () => {
-    if (typeof window === "undefined") return;
-
-    // Load initial comments from mock data base
-    const initialArr =
-      postId === "p1"
-        ? [
-            {
-              id: "c1",
-              author: { name: "Priya M.", initials: "PM" },
-              text: "This is super needed. The NIT Trichy server crashes every course registration!",
-              timestamp: "May 20, 11:00 AM",
-            },
-            {
-              id: "c2",
-              author: { name: "Arjun P.", initials: "AP" },
-              text: "Exactly why I want to build it. Ready to help?",
-              timestamp: "May 20, 11:05 AM",
-            },
-          ]
-        : postId === "p2"
-        ? [
-            {
-              id: "c3",
-              author: { name: "Arjun P.", initials: "AP" },
-              text: "Wow, WebRTC stable is huge. Latency is the real killer there.",
-              timestamp: "1h ago",
-            },
-          ]
-        : [];
-
-    const localCommentsStr = localStorage.getItem(`buildr_comments_${postId}`);
-    let localArr: Comment[] = [];
-    if (localCommentsStr) {
-      try {
-        localArr = JSON.parse(localCommentsStr);
-      } catch (_) {}
-    }
-
-    setComments([...initialArr, ...localArr]);
-  };
-
-  useEffect(() => {
-    syncComments();
-
-    // Preload current user context to eliminate latency in submitting comments
-    const preloadUser = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const name = user.email?.split("@")[0] || "arjun";
-          const initials = name.slice(0, 2).toUpperCase();
-          setCurrentUser({ name, initials });
-        }
-      } catch (err) {
-        console.error("Error preloading user context inside discussions drawer:", err);
-      }
-    };
-    preloadUser();
-  }, [postId]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newComment.trim()) return;
-
-    const authorName = currentUser?.name || "arjun";
-    const initials = currentUser?.initials || "AJ";
-
-    const newCommentObj: Comment = {
-      id: `c_${Date.now()}`,
-      author: {
-        name: authorName,
-        initials,
-      },
-      text: newComment.trim(),
-      timestamp: "Just now",
-    };
-
-    const nextArr = [...comments, newCommentObj];
-    if (typeof window !== "undefined") {
-      // Find the comments written specifically by user in localStorage
-      const localCommentsStr = localStorage.getItem(`buildr_comments_${postId}`);
-      let userComments: Comment[] = [];
-      if (localCommentsStr) {
-        try {
-          userComments = JSON.parse(localCommentsStr);
-        } catch (_) {}
-      }
-      userComments.push(newCommentObj);
-      localStorage.setItem(`buildr_comments_${postId}`, JSON.stringify(userComments));
-
-      // Dispatch a custom event so IdeaCard/UpdateCard in the same tab can update count immediately
-      window.dispatchEvent(new CustomEvent("buildr_comment_added", { detail: { postId } }));
-    }
-
-    setComments(nextArr);
-    setNewComment("");
-    onCommentAdded();
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex flex-col justify-end">
-      {/* Backdrop click close */}
-      <div className="absolute inset-0 cursor-pointer" onClick={onClose} />
-
-      {/* Container */}
-      <div className="bg-card border-t border-border rounded-t-[24px] max-h-[85vh] flex flex-col relative z-10 w-full sm:max-w-md sm:mx-auto shadow-2xl overflow-hidden">
-        {/* Drag handle */}
-        <div className="w-12 h-1.5 bg-border/40 rounded-full mx-auto my-3 shrink-0" />
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 pb-3 border-b border-border">
-          <span className="font-space-grotesk font-extrabold text-[17px] text-foreground">
-            Discussions ({comments.length})
-          </span>
-          <button
-            onClick={onClose}
-            className="p-2 -mr-2 text-muted-foreground hover:text-foreground cursor-pointer"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {/* Scrollable list */}
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 no-scrollbar">
-          {comments.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground text-[13px] font-medium font-mono">
-              {"// no logs found. start the build discussion!"}
-            </div>
-          ) : (
-            comments.map((comment) => (
-              <div key={comment.id} className="flex gap-3 items-start">
-                <Avatar user={{ id: comment.id, name: comment.author.name, college: "", initials: comment.author.initials }} size="sm" hasStory={false} />
-                <div className="flex flex-col flex-1 bg-secondary/40 rounded-[18px] px-4 py-2.5 border border-border/10">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[13px] font-bold text-foreground leading-none">
-                      {comment.author.name}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">{comment.timestamp}</span>
-                  </div>
-                  <p className="text-[13px] text-foreground/90 mt-2 leading-relaxed">{comment.text}</p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Input box */}
-        <form onSubmit={handleSubmit} className="p-4 border-t border-border bg-card pb-safe">
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Add your input to the build..."
-              className="flex-1 bg-input rounded-full py-2.5 px-4 text-[13px] text-foreground placeholder:text-muted-foreground outline-none border border-border/30 focus:border-primary/50 transition-colors bg-secondary/50"
-            />
-            <button
-              type="submit"
-              disabled={!newComment.trim()}
-              className="p-2.5 rounded-full bg-primary text-white disabled:opacity-30 disabled:bg-secondary disabled:text-muted-foreground transition-colors shrink-0 cursor-pointer"
-            >
-              <Send size={16} />
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
 
 const mockFeedUsers: UIUser[] = [
   {
@@ -267,6 +73,8 @@ const initialMockPosts: UIPost[] = [
   },
 ];
 
+const supabase = createClient();
+
 export default function FeedPage() {
   const [posts, setPosts] = useState<UIPost[]>([]);
   const [huddles, setHuddles] = useState<UIUser[]>(mockFeedUsers);
@@ -274,7 +82,6 @@ export default function FeedPage() {
   const [userEmail, setUserEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const supabase = createClient();
 
   const syncPosts = async () => {
     try {
@@ -339,7 +146,7 @@ export default function FeedPage() {
             created_at: p.created_at,
             author_id: p.author_id,
             profiles: profile,
-            likes: 12,
+            likes: 0,
             comments: 0,
           };
         });

@@ -41,40 +41,61 @@ export default function NewPostPage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-6 py-10">
-      <h1 className="font-heading text-3xl font-semibold">Post Your Idea</h1>
-      <form onSubmit={onSubmit} className="mt-6 grid gap-4">
-        <input
-          name="title"
-          required
-          maxLength={100}
-          placeholder="Idea title"
-          className="rounded-xl border border-zinc-300 bg-surface px-4 py-3"
-        />
-        <textarea
-          name="description"
-          required
-          maxLength={1000}
-          placeholder="Describe your idea"
-          className="min-h-36 rounded-xl border border-zinc-300 bg-surface px-4 py-3"
-        />
-        <input
-          name="skills"
-          placeholder="Skills needed (comma separated)"
-          className="rounded-xl border border-zinc-300 bg-surface px-4 py-3"
-        />
-        <PostImageUpload onChange={setImageUrls} />
-        {imageUrls.length > 0 ? (
-          <p className="text-xs text-muted">{imageUrls.length} image(s) ready.</p>
-        ) : null}
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 py-8 text-foreground select-none">
+      <div className="flex items-center gap-3 mb-6">
+        <h1 className="font-space-grotesk font-extrabold text-2xl tracking-tight text-white">
+          {"// compose_idea"}
+        </h1>
+      </div>
+      
+      <form onSubmit={onSubmit} className="grid gap-4.5 bg-card/40 border border-border/40 rounded-2xl p-5 backdrop-blur-md shadow-xl">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[11px] font-mono tracking-wider text-muted-foreground uppercase">// idea_title</label>
+          <input
+            name="title"
+            required
+            maxLength={100}
+            placeholder="Nova Class scheduling..."
+            className="w-full bg-secondary/30 rounded-xl py-3 px-4 text-[13.5px] text-foreground placeholder:text-muted-foreground outline-none border border-border/10 focus:border-primary/50 transition-all"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[11px] font-mono tracking-wider text-muted-foreground uppercase">// build_description</label>
+          <textarea
+            name="description"
+            required
+            maxLength={1000}
+            placeholder="Describe what you want to build..."
+            className="w-full bg-secondary/30 rounded-xl py-3 px-4 text-[13.5px] text-foreground placeholder:text-muted-foreground outline-none border border-border/10 focus:border-primary/50 transition-all min-h-32 resize-none no-scrollbar"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[11px] font-mono tracking-wider text-muted-foreground uppercase">// skills_required</label>
+          <input
+            name="skills"
+            placeholder="React, C++, reverse engineering..."
+            className="w-full bg-secondary/30 rounded-xl py-3 px-4 text-[13.5px] text-foreground placeholder:text-muted-foreground outline-none border border-border/10 focus:border-primary/50 transition-all"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5 pt-2 border-t border-border/10">
+          <label className="text-[11px] font-mono tracking-wider text-muted-foreground uppercase">// attachments</label>
+          <PostImageUpload onChange={setImageUrls} />
+          {imageUrls.length > 0 ? (
+            <p className="text-[11px] font-mono text-cyan-400/90 mt-1">{imageUrls.length} file(s) buffered.</p>
+          ) : null}
+        </div>
+
         <button
           disabled={loading}
-          className="rounded-xl bg-brand px-4 py-3 font-medium text-white disabled:opacity-60"
+          className="w-full mt-2 py-3.5 rounded-xl bg-primary hover:bg-primary/95 text-white font-bold text-[13.5px] border border-primary transition-all duration-200 cursor-pointer shadow-md shadow-primary/20 disabled:opacity-60 active:scale-[0.99] flex items-center justify-center gap-2"
           type="submit"
         >
-          {loading ? "Publishing..." : "Publish with Timestamp"}
+          {loading ? "Compiling..." : "Publish to Loop"}
         </button>
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="text-xs text-red-400 font-mono text-center">{error}</p> : null}
       </form>
     </main>
   );

@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar, IdeaCard, UpdateCard, UIPost, UIUser } from "@/components/Cards";
-import { CommentsDrawer } from "@/app/feed/page";
+import { CommentsDrawer } from "@/components/CommentsDrawer";
 
 const TABS = [
   { id: "posts", icon: Grid, label: "Push Log" },
