@@ -20,12 +20,13 @@ function usePageBadge(pathname: string): string | null {
   return null;
 }
 
+const supabase = createClient();
+
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const supabase = createClient();
 
   useEffect(() => {
     setMounted(true);

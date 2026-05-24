@@ -166,7 +166,7 @@ export function WantInButton({
       // Let's redirect to messages/DM after a short micro-animation
       setTimeout(() => {
         router.push(`/messages?postId=${postId}`);
-      }, 600);
+      }, 150);
     } else {
       router.push(`/messages?postId=${postId}`);
     }
@@ -333,7 +333,7 @@ export function IdeaCard({
   };
 
   return (
-    <div className="bg-card border-y sm:border sm:rounded-2xl border-border py-4 flex flex-col gap-3.5 shadow-sm transition-all duration-300 hover:shadow-md hover:border-primary/10 w-full text-foreground">
+    <div className="bg-card border-y sm:border sm:rounded-2xl border-border py-4 flex flex-col gap-3.5 shadow-sm transition-[box-shadow,border-color] duration-150 hover:shadow-md hover:border-primary/10 w-full text-foreground">
       {/* Header */}
       <div className="flex items-center justify-between px-4">
         <div
@@ -557,7 +557,7 @@ export function UpdateCard({
   };
 
   return (
-    <div className="bg-card border-y sm:border sm:rounded-2xl border-border py-4 flex flex-col gap-3.5 shadow-sm transition-all duration-300 hover:shadow-md hover:border-primary/10 w-full text-foreground">
+    <div className="bg-card border-y sm:border sm:rounded-2xl border-border py-4 flex flex-col gap-3.5 shadow-sm transition-[box-shadow,border-color] duration-150 hover:shadow-md hover:border-primary/10 w-full text-foreground">
       {/* Header */}
       <div className="flex items-center justify-between px-4">
         <div
